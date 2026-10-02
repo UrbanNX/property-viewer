@@ -55,6 +55,6 @@ test('external buffer references are rejected before fetching', async () => {
   const events = [];
   const viewer = createPropertyViewer({ onEvent: event => events.push(event) });
   assert.equal(await viewer.load(jsonGlb(json)), false);
-  assert.deepEqual(events, [{ event: 'error', message: 'The annotated model contains an external resource.' }]);
+  assert.deepEqual(events, [{ event: 'error', message: 'This GLB references external files. Export a self-contained GLB first.' }]);
   viewer.dispose();
 });

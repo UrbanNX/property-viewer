@@ -5,6 +5,6 @@
   "scripts": {
     "build": "esbuild main.js --bundle --format=esm --outfile=dist/main.js && cp index.html dist/index.html"
   },
-  "dependencies": { "@urbannx/property-viewer": "file:../.." },
+  "dependencies": { "@urbannx/property-viewer": "file:../..", "three": "0.180.0" },
   "devDependencies": { "esbuild": "0.25.10" }
 }

@@ -1,12 +1,13 @@
 # @urbannx/property-viewer
 
-Shared Three.js `cad_scene` v1 viewer, maintained in the private
-[UrbanNX/property-viewer](https://github.com/UrbanNX/property-viewer) repository.
+Shared Three.js `cad_scene` v1 viewer. The planned private
+[UrbanNX/property-viewer](https://github.com/UrbanNX/property-viewer) repository
+has not been provisioned or published yet; use a local `npm pack` artifact.
 It does not import Urby, Flutter, React, or Rails.
 
 ## What is implemented
 
-- An ESM npm package with TypeScript declarations and a pinned Three.js dependency.
+- An ESM npm package with TypeScript declarations and a Three.js peer dependency.
 - Independent instances, container-based resizing, GLB byte loading, floor and
   exploded views, wall cuts, labels, camera controls, and explicit disposal.
 - Urby's real consumer at `flutter_app/tool/property_viewer` imports this package
@@ -15,8 +16,10 @@ It does not import Urby, Flutter, React, or Rails.
   independent instances, file input, and a synthetic model requiring no backend.
 
 Urbanwave's `urbanwaveProject` annotations, editor, costing, walk mode, and exports
-are **not** migrated. Plain GLBs emit `unsupported`; Urby retains its existing
-legacy viewer fallback. Do not replace Urbanwave's editor with this package yet.
+remain host-owned. Urbanwave consumes the annotation-neutral `./model` API for
+every GLB load and disposal, preserving editing and exports. The high-level
+`createPropertyViewer` API still emits `unsupported` for plain GLBs; Urby retains
+its legacy viewer fallback.
 
 ## Install and run locally
 
@@ -35,12 +38,13 @@ npm local links do not install the linked package's own dependencies.
 
 ## Consume from a separate GitHub repository
 
-Consumers install directly from GitHub:
+After provisioning and publishing the repository, consumers can install from GitHub:
 
 ```json
 {
   "dependencies": {
-    "@urbannx/property-viewer": "github:UrbanNX/property-viewer#v0.1.0"
+    "@urbannx/property-viewer": "github:UrbanNX/property-viewer#<published-0.2.0-commit>",
+    "three": "0.180.0"
   }
 }
 ```
@@ -51,7 +55,7 @@ lockfile. Private repositories require GitHub read access on developer and CI ma
 This is a Git dependency; it does not require npm publishing or a package build
 hook. The host's bundler compiles the shipped ESM source and includes Three.js.
 Alternatively, publish versioned releases to npm or GitHub Packages and consume
-`"@urbannx/property-viewer": "0.1.0"`; GitHub Packages additionally needs a scoped
+`"@urbannx/property-viewer": "0.2.0"`; GitHub Packages additionally needs a scoped
 registry and authentication configuration. Never commit tokens.
 
 `npm pack --dry-run` lists the distribution files. `npm pack` produces an installable
@@ -98,8 +102,19 @@ GLBs must be self-contained. External buffer/image URLs are blocked. Metadata is
 metres/Z-up; geometry keeps glTF world transforms. This is preview rendering, not
 an authoritative CAD validator. Match Urby's server-side validation for uploads.
 
-## Next extraction stage
+## Editable model API
 
-Introduce an `urbanwaveProject` metadata adapter with fixtures from Urbanwave,
-align Three.js versions, then migrate its read-only rendering. Keep its editor
-and project persistence intact until their contracts are deliberately extracted.
+```js
+import { loadModel, disposeModels } from '@urbannx/property-viewer/model';
+const gltf = await loadModel(bytes);
+// Preserve and edit gltf.scene in the host renderer.
+disposeModels(gltf.scenes);
+```
+
+This API preserves scene hierarchy, geometry and all extras without interpreting
+`cad_scene` or `urbanwaveProject`. It rejects malformed headers and external
+resources, supports Meshopt and returns caller-owned scenes. The caller handles
+stale loads, geometry validation and atomic replacement of its current model.
+Both APIs use this loading and disposal implementation. Three.js is a peer to
+avoid duplicate constructors: Urby pins 0.180.0; Urbanwave retains ^0.186.1.
+Hosts importing declarations also need their usual matching `@types/three`.

@@ -24,7 +24,7 @@
  * THE SOFTWARE.
  */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadModel, disposeModels as release } from './model.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { annotations, meshBinding, previewSection, worldPoint } from './annotations.js';
@@ -243,27 +243,12 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
         send('unsupported');
         return false;
       }
-      const loader = new GLTFLoader();
-      let resourceFailed = false;
-      loader.manager.onError = () => {
-        resourceFailed = true;
-      };
-      // Annotated GLBs must be self-contained. Do not fetch URLs from metadata
-      // or external glTF buffers/images in a privileged in-app webview.
-      loader.manager.setURLModifier((url) => {
-        if (url.startsWith('blob:') || url.startsWith('data:')) return url;
-        throw new Error('The annotated model contains an external resource.');
-      });
-      const gltf = await loader.parseAsync(
-        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-        '',
-      );
+      const gltf = await loadModel(bytes);
       if (disposed || current !== generation) {
         release(gltf.scenes);
         return false;
       }
       loadedScenes = gltf.scenes;
-      if (resourceFailed) throw new Error('An embedded model resource could not be loaded.');
       gltf.scene.updateMatrixWorld(true);
       const source = [];
       gltf.scene.traverse((object) => {
@@ -390,25 +375,6 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       return false;
     }
   };
-
-  function release(scenes) {
-    const geometries = new Set(),
-      textures = new Set(),
-      allMaterials = new Set();
-    scenes.filter(Boolean).forEach((root) =>
-      root.traverse((o) => {
-        if (o.geometry) geometries.add(o.geometry);
-        if (o.material)
-          materials(o).forEach((m) => {
-            for (const value of Object.values(m)) if (value?.isTexture) textures.add(value);
-            allMaterials.add(m);
-          });
-      }),
-    );
-    allMaterials.forEach((m) => m.dispose());
-    geometries.forEach((g) => g.dispose());
-    textures.forEach((t) => t.dispose());
-  }
 
   function clear() {
     ready = false;
