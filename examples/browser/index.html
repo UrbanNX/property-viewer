@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Property viewer · Package demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f7f8f5; color: #24382e; font: 15px system-ui, sans-serif; }
+    main { max-width: 1320px; margin: auto; padding: 28px; }
+    h1 { margin: 5px 0 10px; font-size: 30px; } h2 { font-size: 18px; margin: 0; }
+    p { color: #52635a; line-height: 1.5; } .eyebrow { font: 12px monospace; letter-spacing: .08em; }
+    .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 22px; margin-top: 24px; }
+    article { background: white; border: 1px solid #d6ddd6; border-radius: 12px; overflow: hidden; min-width: 0; }
+    header, .controls { padding: 16px; } header p { margin: 6px 0 0; font-size: 13px; }
+    .stage { position: relative; height: 340px; background: #ecefe7; }
+    .canvas, .labels { position: absolute; inset: 0; overflow: hidden; }
+    canvas { display: block; touch-action: none; } .labels { pointer-events: none; }
+    .room-label { position: absolute; transform: translate(-50%,-50%); font-size: 11px; border: 1px solid #52635a; border-radius: 5px; padding: 3px 5px; background: #f7f8f5; white-space: nowrap; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select, .upload { font: inherit; border: 1px solid #c5cec5; border-radius: 6px; padding: 7px 10px; background: white; color: inherit; cursor: pointer; }
+    button:hover, .upload:hover { background: #edf2ec; } button:disabled { opacity: .45; cursor: default; }
+    button.primary { background: #28533c; color: white; } input[type=file] { max-width: 100%; font-size: 12px; }
+    .status { margin: 0; padding: 0 16px 16px; font: 12px monospace; min-height: 34px; }
+    pre { overflow: auto; border-radius: 8px; padding: 16px; background: #20382b; color: #e7f1e9; line-height: 1.5; }
+    details { margin-top: 22px; } summary { cursor: pointer; } .note { font-size: 13px; }
+    @media(max-width: 760px) { main { padding: 16px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">@URBANNX/PROPERTY-VIEWER · 0.1.0</div>
+  <h1>One package. Independent viewers.</h1>
+  <p>Both panels import the same npm package. Load the sample, then change one panel's floor—the other stays independent.</p>
+  <div class="grid" id="viewers"></div>
+  <details open>
+    <summary>The consumer code</summary>
+    <pre>import { createPropertyViewer } from '@urbannx/property-viewer';
+
+const viewer = createPropertyViewer({ container, labels, onEvent });
+await viewer.load(await file.arrayBuffer());
+viewer.command({ action: 'view', mode: 'floor', floor: 'Ground' });
+// On unmount:
+viewer.dispose();</pre>
+  </details>
+  <p class="note">Working extraction of Urby's cad_scene v1 viewer. Synthetic sample, no backend, no uploads to a server. Views are transient and reset on reload. The narrow panel demonstrates container sizing, not a native Flutter WebView. Urbanwave's editor/urbanwaveProject adapter is not included yet.</p>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

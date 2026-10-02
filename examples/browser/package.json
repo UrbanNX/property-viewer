@@ -1,0 +1,10 @@
+{
+  "name": "property-viewer-browser-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild main.js --bundle --format=esm --outfile=dist/main.js && cp index.html dist/index.html"
+  },
+  "dependencies": { "@urbannx/property-viewer": "file:../.." },
+  "devDependencies": { "esbuild": "0.25.10" }
+}

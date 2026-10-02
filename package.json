@@ -1,0 +1,14 @@
+{
+  "name": "@urbannx/property-viewer",
+  "version": "0.1.0",
+  "description": "Framework-independent Three.js viewer for cad_scene annotated property GLBs",
+  "license": "UNLICENSED",
+  "repository": { "type": "git", "url": "https://github.com/UrbanNX/property-viewer.git" },
+  "type": "module",
+  "exports": {
+    ".": { "types": "./src/viewer.d.ts", "import": "./src/viewer.js" }
+  },
+  "files": ["src/*.js", "src/*.d.ts", "!src/*.test.js"],
+  "scripts": { "test": "node --test src/*.test.js" },
+  "dependencies": { "three": "0.180.0" }
+}
