@@ -30,7 +30,39 @@ export async function loadModel(input) {
     throw new Error(externalError);
   });
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
-  const gltf = await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  // GLTFLoader reduces associations separately for each scene. Capture reachable
+  // nodes before that reduction; do not eagerly load unreferenced node resources.
+  // A temporary serializable marker also survives r186's shared-scene clones.
+  const marker = `__propertyViewerSource_${THREE.MathUtils.generateUUID()}`;
+  const saved = new Map();
+  loader.register(parser => ({
+    name: 'PROPERTY_VIEWER_source_associations',
+    async loadNode(index) {
+      const node = await parser.loadNode(index);
+      node.traverse(object => {
+        const association = parser.associations.get(object);
+        if (!association) return;
+        saved.set(object, { ...association });
+        object.userData[marker] = { ...association };
+      });
+      return node;
+    },
+    afterRoot(result) {
+      for (const [object, association] of saved) parser.associations.set(object, association);
+      for (const scene of result.scenes) scene.traverse(object => {
+        if (object.userData[marker]) {
+          parser.associations.set(object, object.userData[marker]);
+          delete object.userData[marker];
+        }
+      });
+    },
+  }));
+  let gltf;
+  try {
+    gltf = await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
+  } finally {
+    for (const object of saved.keys()) delete object.userData[marker];
+  }
   if (blocked || failed) {
     disposeModels(gltf.scenes);
     throw new Error(

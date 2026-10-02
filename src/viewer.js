@@ -86,7 +86,7 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
   }
 
   function applyVisibility() {
-    const spacing = Math.max(2, (fullBounds.getSize(new THREE.Vector3()).y / data.levels.size) * 1.4);
+    const spacing = Math.max(2, (fullBounds.getSize(new THREE.Vector3()).y / Math.max(1, data.levels.size)) * 1.4);
     for (const entry of entries) {
       const section = previewSection(entry, data, { mode, floor, cut }, spacing);
       if (section.lower !== entry.lower || section.upper !== entry.upper || !entry.sectionBox) {
@@ -256,7 +256,8 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       });
       // Legacy files may put cad_scene on glTF mesh extras, not only nodes.
       const bindingFor = mesh => resolveObjectBinding(data, mesh, gltf.parser.associations);
-      if (!source.some((mesh) => bindingFor(mesh).floors.length)) {
+      if (!source.length) throw new Error('The model has no visible geometry.');
+      if (data.profile === 'cad_scene' && !source.some((mesh) => bindingFor(mesh).floors.length)) {
         clear();
         send('unsupported');
         return false;

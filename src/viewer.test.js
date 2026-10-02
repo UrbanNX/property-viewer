@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPropertyViewer } from './viewer.js';
 import { sampleGlb } from '../examples/browser/sample.js';
-import { annotatedFixture, unpackJson, packGlb } from './urbanwave-fixture.js';
+import { annotatedFixture, unpackJson, packGlb, fixtureProject } from './urbanwave-fixture.js';
+import { embedProject } from './urbanwave-contract.js';
 
 function jsonGlb(json) {
   const text = new TextEncoder().encode(JSON.stringify(json));
@@ -69,5 +70,14 @@ test('malformed universal metadata rejects even when valid legacy metadata is pr
   assert.equal(await viewer.load(packGlb(json)), false);
   assert.equal(events.length, 1);
   assert.equal(events[0].event, 'error');
+  viewer.dispose();
+});
+
+test('valid universal metadata without geometry reports an error, not legacy unsupported', async () => {
+  const bytes = await embedProject(packGlb({ asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [] }], nodes: [] }), fixtureProject());
+  const events = [];
+  const viewer = createPropertyViewer({ onEvent: event => events.push(event) });
+  assert.equal(await viewer.load(bytes), false);
+  assert.deepEqual(events, [{ event: 'error', message: 'The model has no visible geometry.' }]);
   viewer.dispose();
 });

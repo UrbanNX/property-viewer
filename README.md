@@ -122,6 +122,13 @@ Both APIs use this loading and disposal implementation. Three.js is a peer to
 avoid duplicate constructors: Urby pins 0.180.0; Urbanwave retains ^0.186.1.
 Hosts importing declarations also need their usual matching `@types/three`.
 
+`loadModel` preserves source associations across all loaded scenes, including
+multi-primitive meshes and Three r186 shared-scene clones. It captures reachable
+nodes before GLTFLoader's per-scene pruning; it does not preload unused nodes or
+recover identities from names. Temporary clone markers are removed before return.
+Scene hierarchy remains Three-version-native (r180 reparents shared scene roots;
+r186 clones them); the package does not fabricate replacement geometry.
+
 ## Rendering interpretation API (unpublished 0.3.0)
 
 ```js
@@ -247,3 +254,14 @@ receive opaque shadows; preview shadow flags restore at 1. Source materials are
 never modified. Doors, windows, boundary/mixed and unknown geometry retain their
 authored materials. Opacity survives view changes but resets to 1 on each load;
 these transient presentation changes are never persisted into a GLB.
+
+Universal models need geometry, not floor assignments: even with no declared
+storeys they support exterior/See Through and report editor-state capabilities.
+The bound-floor requirement remains specific to legacy CAD. Annotated models with
+no mesh geometry emit `error: The model has no visible geometry.`
+
+For real WebGL regression checks, build the browser example, open
+`regression.html` on its server, and click **Run loading regressions**. It asserts
+unbound universal ready/capability/editor-state events, opacity, zero-storey
+exploded mode, both multiscene default indices, the legacy bound-floor guard, and
+the separate empty-geometry error. The status must read `PASS`.
