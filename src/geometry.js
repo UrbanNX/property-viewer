@@ -1,4 +1,4 @@
-import { Box3, Mesh, Vector3 } from 'three';
+import { Box3, MathUtils, Mesh, Vector3 } from 'three';
 
 export function previewMesh(original) {
   // Preserve single-material vs grouped-material semantics and the exact
@@ -47,4 +47,32 @@ export function sectionBounds(geometry, matrix, lower, upper) {
     for (const p of points) box.expandByPoint(p);
   }
   return box;
+}
+
+// Pure camera fit shared by canvas hosts with different controls and UI.
+export function frameBounds(box, { direction = new Vector3(1, .7, 1), target, aspect, fov = 38 }) {
+  if (box.isEmpty()) return null;
+  const center = target?.clone() ?? box.getCenter(new Vector3());
+  const forward = direction.clone().normalize();
+  const right = new Vector3().crossVectors(new Vector3(0, 1, 0), forward).normalize();
+  const up = new Vector3().crossVectors(forward, right);
+  const tanY = Math.tan(MathUtils.degToRad(fov / 2));
+  let distance = .5;
+  for (const x of [box.min.x, box.max.x])
+    for (const y of [box.min.y, box.max.y])
+      for (const z of [box.min.z, box.max.z]) {
+        const point = new Vector3(x, y, z).sub(center);
+        distance = Math.max(
+          distance,
+          point.dot(forward) +
+            Math.max(Math.abs(point.dot(right)) / (tanY * aspect * .9), Math.abs(point.dot(up)) / (tanY * .85)),
+        );
+      }
+  return {
+    target: center,
+    position: center.clone().addScaledVector(forward, distance),
+    distance,
+    near: Math.max(distance / 1000, .001),
+    far: Math.max(distance * 100, 100),
+  };
 }

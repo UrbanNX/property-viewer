@@ -28,7 +28,7 @@ import { loadModel, disposeModels as release } from './model.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { annotations, meshBinding, previewSection, worldPoint } from './annotations.js';
-import { previewMesh, sectionBounds } from './geometry.js';
+import { frameBounds, previewMesh, sectionBounds } from './geometry.js';
 import { PassiveRotation } from './rotation.js';
 
 // Each host owns its containers and controls; no Flutter or React globals.
@@ -71,27 +71,12 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
 
   function frame(direction = new THREE.Vector3(1, 0.7, 1), target) {
     const box = visibleBounds();
-    if (box.isEmpty()) return;
-    const center = target || box.getCenter(new THREE.Vector3());
-    direction.normalize();
-    const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize();
-    const up = new THREE.Vector3().crossVectors(direction, right);
-    const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    let distance = 0.5;
-    for (const x of [box.min.x, box.max.x])
-      for (const y of [box.min.y, box.max.y])
-        for (const z of [box.min.z, box.max.z]) {
-          const p = new THREE.Vector3(x, y, z).sub(center);
-          distance = Math.max(
-            distance,
-            p.dot(direction) +
-              Math.max(Math.abs(p.dot(right)) / (tanY * camera.aspect * 0.9), Math.abs(p.dot(up)) / (tanY * 0.85)),
-          );
-        }
-    controls.target.copy(center);
-    camera.position.copy(center).addScaledVector(direction, distance);
-    camera.near = Math.max(distance / 1000, 0.001);
-    camera.far = Math.max(distance * 100, 100);
+    const framing = frameBounds(box, { direction, target, aspect: camera.aspect, fov: camera.fov });
+    if (!framing) return;
+    controls.target.copy(framing.target);
+    camera.position.copy(framing.position);
+    camera.near = framing.near;
+    camera.far = framing.far;
     camera.updateProjectionMatrix();
     controls.update();
   }

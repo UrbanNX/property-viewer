@@ -51,8 +51,11 @@ export function meshBinding(object, data) {
     }
     return [];
   });
+  const bindings = resolved
+    .filter(c => data.levels.has(c.floor) && named(c.category))
+    .map(c => ({ floor: c.floor, category: c.category }));
   const floors = [...new Set(resolved.map(c => c.floor).filter(f => data.levels.has(f)))];
-  return { floors, sectioned: resolved.some(c => ['Walls', 'Doors', 'Windows'].includes(c.category)) };
+  return { bindings, floors, sectioned: resolved.some(c => ['Walls', 'Doors', 'Windows'].includes(c.category)) };
 }
 
 // A source node can bind to several floors (e.g. a merged site/ground shell).

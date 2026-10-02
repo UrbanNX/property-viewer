@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BufferGeometry, Float32BufferAttribute, Matrix4, Mesh, MeshStandardMaterial } from 'three';
-import { previewMesh, sectionBounds } from './geometry.js';
+import { Box3, BufferGeometry, Float32BufferAttribute, Matrix4, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { frameBounds, previewMesh, sectionBounds } from './geometry.js';
 
 test('preview clones preserve single-material drawing and exact world transforms', () => {
   const original = new Mesh(new BufferGeometry(), new MeshStandardMaterial());
@@ -48,4 +48,23 @@ test('illustration materials are matte without modifying source or glass', () =>
   assert.equal(preview.castShadow, true);
   assert.equal(preview.receiveShadow, true);
   assert.equal(previewMesh(new Mesh(source.geometry, glass)).castShadow, false);
+});
+
+test('camera framing fits asymmetric bounds and responds to portrait aspect without mutating inputs', () => {
+  const box = new Box3(new Vector3(-7, -1, -2), new Vector3(3, 8, 19));
+  const direction = new Vector3(.4, .8, 1.7);
+  const originalDirection = direction.clone();
+  const landscape = frameBounds(box, { direction, aspect: 16 / 9, fov: 38 });
+  const portrait = frameBounds(box, { direction, aspect: 9 / 16, fov: 38 });
+  assert.deepEqual(direction.toArray(), originalDirection.toArray());
+  assert.deepEqual(landscape.target.toArray(), [-2, 3.5, 8.5]);
+  assert.ok(portrait.distance > landscape.distance);
+  assert.ok(Math.abs(landscape.position.distanceTo(landscape.target) - landscape.distance) < 1e-12);
+  assert.equal(landscape.near, landscape.distance / 1000);
+  assert.equal(landscape.far, landscape.distance * 100);
+  const authoredTarget = new Vector3(0, 2, 4);
+  const authored = frameBounds(box, { direction, target: authoredTarget, aspect: 1 });
+  assert.notEqual(authored.target, authoredTarget);
+  assert.deepEqual(authored.target.toArray(), authoredTarget.toArray());
+  assert.equal(frameBounds(new Box3(), { aspect: 1 }), null);
 });

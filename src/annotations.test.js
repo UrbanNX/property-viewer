@@ -34,6 +34,11 @@ test('preserves supplied names, cut height, room labels and valid cameras; rejec
   assert.deepEqual(data.views.map(v => v.id), ['ground']);
   assert.deepEqual(worldPoint([2, 5, .21]), [2, .21, -5]);
 });
+test('requires the raw glTF JSON shape instead of guessing loader wrappers', () => {
+  const json = fixture();
+  assert.ok(annotations(json));
+  assert.equal(annotations({ userData: json.extras }), null);
+});
 test('derives missing datums from minimum wall base, not first wall', () => {
   const json = fixture(), spec = json.extras.cad_scene.scene;
   spec.building.levels = [];
@@ -43,12 +48,19 @@ test('derives missing datums from minimum wall base, not first wall', () => {
 });
 test('generated IDs, inherited external bindings, windows and mixed floor targets resolve', () => {
   const data = annotations(fixture());
-  assert.deepEqual(meshBinding({ userData: { cad_scene: { component_id: 'first-wall' } } }, data), { floors: ['First Floor'], sectioned: true });
+  assert.deepEqual(meshBinding({ userData: { cad_scene: { component_id: 'first-wall' } } }, data), {
+    bindings: [{ floor: 'First Floor', category: 'Walls' }], floors: ['First Floor'], sectioned: true,
+  });
   const parent = { userData: { cad_scene: { targets: [{ kind: 'window', id: 'w1' }] } } };
-  assert.deepEqual(meshBinding({ parent }, data), { floors: ['First Floor'], sectioned: true });
+  assert.deepEqual(meshBinding({ parent }, data), {
+    bindings: [{ floor: 'First Floor', category: 'Windows' }], floors: ['First Floor'], sectioned: true,
+  });
   const mixed = { userData: { cad_scene: { targets: [{ kind: 'component', id: 'ground-wall' }, { kind: 'component', id: 'site' }] } } };
-  assert.deepEqual(meshBinding(mixed, data), { floors: ['Ground', 'Site'], sectioned: true });
-  assert.deepEqual(meshBinding({}, data), { floors: [], sectioned: false });
+  assert.deepEqual(meshBinding(mixed, data), {
+    bindings: [{ floor: 'Ground', category: 'Walls' }, { floor: 'Site', category: 'Site' }],
+    floors: ['Ground', 'Site'], sectioned: true,
+  });
+  assert.deepEqual(meshBinding({}, data), { bindings: [], floors: [], sectioned: false });
 });
 test('mixed-floor geometry partitions at declared datums regardless of target order', () => {
   const data = annotations(fixture());
