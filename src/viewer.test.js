@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createPropertyViewer } from './viewer.js';
 import { sampleGlb } from '../examples/browser/sample.js';
+import { annotatedFixture, unpackJson, packGlb } from './urbanwave-fixture.js';
 
 function jsonGlb(json) {
   const text = new TextEncoder().encode(JSON.stringify(json));
@@ -56,5 +57,17 @@ test('external buffer references are rejected before fetching', async () => {
   const viewer = createPropertyViewer({ onEvent: event => events.push(event) });
   assert.equal(await viewer.load(jsonGlb(json)), false);
   assert.deepEqual(events, [{ event: 'error', message: 'This GLB references external files. Export a self-contained GLB first.' }]);
+  viewer.dispose();
+});
+
+test('malformed universal metadata rejects even when valid legacy metadata is present', async () => {
+  const json = unpackJson(await annotatedFixture());
+  json.extras = unpackJson(sampleGlb()).extras;
+  json.scenes[1].extras.urbanwaveProject = { format: 'invalid' };
+  const events = [];
+  const viewer = createPropertyViewer({ onEvent: event => events.push(event) });
+  assert.equal(await viewer.load(packGlb(json)), false);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event, 'error');
   viewer.dispose();
 });

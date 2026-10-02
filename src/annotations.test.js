@@ -49,23 +49,38 @@ test('derives missing datums from minimum wall base, not first wall', () => {
 test('generated IDs, inherited external bindings, windows and mixed floor targets resolve', () => {
   const data = annotations(fixture());
   assert.deepEqual(meshBinding({ userData: { cad_scene: { component_id: 'first-wall' } } }, data), {
-    bindings: [{ floor: 'First Floor', category: 'Walls' }], floors: ['First Floor'], sectioned: true,
+    bindings: [{ floor: 'First Floor', category: 'Walls' }], floors: ['First Floor'], sectioned: true, wall: true,
   });
   const parent = { userData: { cad_scene: { targets: [{ kind: 'window', id: 'w1' }] } } };
   assert.deepEqual(meshBinding({ parent }, data), {
-    bindings: [{ floor: 'First Floor', category: 'Windows' }], floors: ['First Floor'], sectioned: true,
+    bindings: [{ floor: 'First Floor', category: 'Windows' }], floors: ['First Floor'], sectioned: true, wall: false,
   });
   const mixed = { userData: { cad_scene: { targets: [{ kind: 'component', id: 'ground-wall' }, { kind: 'component', id: 'site' }] } } };
   assert.deepEqual(meshBinding(mixed, data), {
     bindings: [{ floor: 'Ground', category: 'Walls' }, { floor: 'Site', category: 'Site' }],
-    floors: ['Ground', 'Site'], sectioned: true,
+    floors: ['Ground', 'Site'], sectioned: true, wall: false,
   });
-  assert.deepEqual(meshBinding({}, data), { bindings: [], floors: [], sectioned: false });
+  assert.deepEqual(meshBinding({}, data), { bindings: [], floors: [], sectioned: false, wall: false });
 });
 test('mixed-floor geometry partitions at declared datums regardless of target order', () => {
   const data = annotations(fixture());
   assert.deepEqual(floorBand('Site', ['Ground', 'Site'], data.levels), [-Infinity, .15]);
   assert.deepEqual(floorBand('Ground', ['Ground', 'Site'], data.levels), [.15, Infinity]);
+});
+
+test('wall safety does not discard unresolved targets and ordered bindings retain repeated categories', () => {
+  const data = annotations(fixture());
+  const wall = { kind: 'component', id: 'ground-wall' };
+  for (const invalid of [null, {}, { kind: 'component', id: 'missing' }, { kind: 'window', id: 'missing' }]) {
+    const binding = meshBinding({ userData: { cad_scene: { targets: [wall, invalid] } } }, data);
+    assert.equal(binding.wall, false);
+    assert.deepEqual(binding.bindings, [{ floor: 'Ground', category: 'Walls' }]);
+    assert.deepEqual(binding.floors, ['Ground']);
+  }
+  const binding = meshBinding({ userData: { cad_scene: { targets: [wall, { kind: 'window', id: 'w1' }, wall] } } }, data);
+  assert.deepEqual(binding.bindings, [{ floor: 'Ground', category: 'Walls' }, { floor: 'First Floor', category: 'Windows' }, { floor: 'Ground', category: 'Walls' }]);
+  assert.deepEqual(binding.floors, ['Ground', 'First Floor']);
+  assert.equal(binding.wall, false);
 });
 test('floor clipping uses absolute level + cut height and exterior restores all geometry', () => {
   const data = annotations(fixture());

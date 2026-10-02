@@ -3,15 +3,34 @@
   "version": "0.3.0",
   "description": "Framework-independent Three.js viewer for cad_scene annotated property GLBs",
   "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/UrbanNX/property-viewer.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UrbanNX/property-viewer.git"
+  },
   "type": "module",
   "exports": {
     ".": { "types": "./src/viewer.d.ts", "import": "./src/viewer.js" },
     "./model": { "types": "./src/model.d.ts", "import": "./src/model.js" },
-    "./rendering": { "types": "./src/rendering.d.ts", "import": "./src/rendering.js" }
+    "./rendering": { "types": "./src/rendering.d.ts", "import": "./src/rendering.js" },
+    "./annotations": {
+      "types": "./src/universal.d.ts",
+      "import": "./src/universal.js"
+    }
   },
-  "files": ["src/*.js", "src/*.d.ts", "!src/*.test.js"],
-  "scripts": { "test": "node --test src/*.test.js" },
-  "peerDependencies": { "three": "0.180.0 || ^0.186.1" },
-  "devDependencies": { "three": "0.180.0" }
+  "files": [
+    "src/*.js",
+    "src/*.d.ts",
+    "!src/*.test.js",
+    "!src/*fixture.js"
+  ],
+  "scripts": {
+    "test": "node --test src/*.test.js"
+  },
+  "peerDependencies": {
+    "three": "0.180.0 || ^0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "three": "0.180.0"
+  }
 }

@@ -14,6 +14,8 @@ export interface MeshBinding {
   bindings: Array<{ floor: string; category: string }>;
   floors: string[];
   sectioned: boolean;
+  /** True only when every declared target resolves to Walls. */
+  wall?: boolean;
 }
 export interface PreviewEntry extends MeshBinding {
   floor: string | null;
@@ -42,7 +44,7 @@ export function meshBinding(object: Object3D, data: CadSceneData): MeshBinding;
 export function floorBand(floor: string, floors: string[], levels: Map<string, number | null>): [number, number];
 export function previewSection(
   entry: PreviewEntry,
-  data: CadSceneData,
+  data: Pick<CadSceneData, 'levels' | 'cutHeight'>,
   selection: { mode: ViewMode; floor?: string | null; cut?: boolean },
   spacing: number,
 ): PreviewSection;

@@ -27,7 +27,9 @@ import * as THREE from 'three';
 import { loadModel, disposeModels as release } from './model.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { annotations, meshBinding, previewSection, worldPoint } from './annotations.js';
+import { previewSection, worldPoint } from './annotations.js';
+import { resolveAnnotations, resolveObjectBinding } from './universal.js';
+import { captureOpacity, applyWallOpacity } from './opacity.js';
 import { frameBounds, previewMesh, sectionBounds } from './geometry.js';
 import { PassiveRotation } from './rotation.js';
 
@@ -48,13 +50,15 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
     floor = null;
   let cut = false,
     showLabels = false;
+  let wallOpacity = 1;
+  const canSetWallOpacity = () => entries.some(entry => entry.wall);
   let observer,
     environment,
     loadedScenes = [],
     generation = 0,
     disposed = false,
     ready = false;
-  const vector = (p) => new THREE.Vector3(...worldPoint(p));
+  const vector = (p) => new THREE.Vector3(...(data.profile === 'urbanwaveProject' ? p : worldPoint(p)));
   const materials = (mesh) => (Array.isArray(mesh.material) ? mesh.material : [mesh.material]);
   const visibleBounds = () => {
     const result = new THREE.Box3();
@@ -113,6 +117,7 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
         entry.mesh.add(entry.edge);
       }
       entry.edge.material.clippingPlanes = planes;
+      applyWallOpacity(entry, wallOpacity);
     }
     scene.updateMatrixWorld(true);
     // Fit shadows to the visible section, including exploded offsets. Rebuild
@@ -167,6 +172,8 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       floor,
       cut,
       labels: showLabels,
+      wallOpacity,
+      canSetWallOpacity: canSetWallOpacity(),
       canCut: mode === 'floor' && Number.isFinite(data.levels.get(floor)),
     });
   }
@@ -181,6 +188,12 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       return;
     rotation?.stop();
     switch (command.action) {
+      case 'wallOpacity':
+        if (!canSetWallOpacity() || !Number.isFinite(command.value)) return;
+        wallOpacity = Math.max(0, Math.min(1, command.value));
+        applyVisibility();
+        publish();
+        break;
       case 'view':
         selectView(command.mode, command.floor);
         rotation.select(command.mode);
@@ -223,7 +236,9 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       )
         throw new Error('Invalid GLB header.');
       const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength)));
-      data = annotations(json);
+      const resolved = await resolveAnnotations(bytes, json);
+      if (disposed || current !== generation) return false;
+      data = resolved;
       if (!data) {
         send('unsupported');
         return false;
@@ -239,7 +254,9 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       gltf.scene.traverse((object) => {
         if (object.isMesh) source.push(object);
       });
-      if (!source.some((mesh) => meshBinding(mesh, data).floors.length)) {
+      // Legacy files may put cad_scene on glTF mesh extras, not only nodes.
+      const bindingFor = mesh => resolveObjectBinding(data, mesh, gltf.parser.associations);
+      if (!source.some((mesh) => bindingFor(mesh).floors.length)) {
         clear();
         send('unsupported');
         return false;
@@ -279,7 +296,7 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
       fullBounds = new THREE.Box3();
       for (const original of source) {
-        const binding = meshBinding(original, data);
+        const binding = bindingFor(original);
         const box = new THREE.Box3().setFromObject(original);
         fullBounds.union(box);
         for (const [index, name] of (binding.floors.length ? binding.floors : [null]).entries()) {
@@ -289,6 +306,7 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
           scene.add(mesh);
           entries.push({
             mesh,
+            authoredOpacity: captureOpacity(mesh),
             box,
             matrix: original.matrixWorld.clone(),
             ...binding,
@@ -351,7 +369,8 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
       ready = true;
       selectView('exterior');
       rotation.select('exterior');
-      send('ready', { floors: [...data.levels.keys()], hasRooms: data.rooms.length > 0 });
+      send('ready', { floors: [...data.levels.keys()], hasRooms: data.rooms.length > 0,
+        profile: data.profile, hasEditorState: data.hasEditorState, canSetWallOpacity: canSetWallOpacity() });
       return true;
     } catch (error) {
       if (disposed || current !== generation) return false;
@@ -379,6 +398,7 @@ export function createPropertyViewer({ container, labels: labelContainer, onEven
     mode = 'exterior';
     floor = null;
     cut = showLabels = false;
+    wallOpacity = 1;
   }
 
   return {
