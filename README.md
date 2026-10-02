@@ -1,8 +1,8 @@
 # @urbannx/property-viewer
 
-Shared Three.js `cad_scene` v1 viewer. The planned private
-[UrbanNX/property-viewer](https://github.com/UrbanNX/property-viewer) repository
-has not been provisioned or published yet; use a local `npm pack` artifact.
+Shared Three.js `cad_scene` v1 viewer, published from the private
+[UrbanNX/property-viewer](https://github.com/UrbanNX/property-viewer) repository.
+The `v0.2.0` tag includes both the viewer and editable model APIs.
 It does not import Urby, Flutter, React, or Rails.
 
 ## What is implemented
@@ -38,12 +38,12 @@ npm local links do not install the linked package's own dependencies.
 
 ## Consume from a separate GitHub repository
 
-After provisioning and publishing the repository, consumers can install from GitHub:
+Consumers can install the immutable `v0.2.0` commit directly from GitHub:
 
 ```json
 {
   "dependencies": {
-    "@urbannx/property-viewer": "github:UrbanNX/property-viewer#<published-0.2.0-commit>",
+    "@urbannx/property-viewer": "github:UrbanNX/property-viewer#9966e1d452fe64e935b60f58925c1bcb7b7ba888",
     "three": "0.180.0"
   }
 }
