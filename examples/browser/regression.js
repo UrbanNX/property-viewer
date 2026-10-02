@@ -25,13 +25,18 @@ document.querySelector('#run').onclick = async () => {
     viewer.command({ action: 'view', mode: 'exploded' });
     check(events.at(-1).mode === 'exploded' && events.at(-1).wallOpacity === .5, 'zero-storey exploded mode must preserve opacity');
 
-    for (const scene of [0, 1]) {
+    for (const nested of [false, true]) for (const scene of [0, 1]) {
       const json = unpackJson(plain);
+      const metadata = fixtureProject();
+      if (nested) {
+        json.nodes = [{ name: 'RootWithChildren', mesh: 0, children: [2] }, { name: 'FastOtherScene', mesh: 1 }, { name: 'Leaf', mesh: 2 }];
+        metadata.meta = { RootWithChildren: { type: 'wall', floor: 'Lower' }, FastOtherScene: { type: 'wall', floor: 'Upper' }, Leaf: { type: 'furniture' } };
+      }
       json.scenes = [{ nodes: [0] }, { nodes: [1] }]; json.scene = scene;
       const bytes = packGlb(json, plain.subarray(28 + new DataView(plain.buffer).getUint32(12, true)));
       events.length = 0;
-      check(await viewer.load(await embedProject(bytes, fixtureProject())), `multiscene default ${scene} must load`);
-      check(events.at(-1).event === 'ready' && events.at(-1).canSetWallOpacity, `multiscene default ${scene} must preserve wall capability`);
+      check(await viewer.load(await embedProject(bytes, metadata)), `multiscene default ${scene}, nested=${nested} must load`);
+      check(events.at(-1).event === 'ready' && events.at(-1).canSetWallOpacity, `multiscene default ${scene}, nested=${nested} must preserve wall capability`);
     }
 
     const legacy = sampleGlb(), json = unpackJson(legacy);
@@ -45,7 +50,7 @@ document.querySelector('#run').onclick = async () => {
     check(events.at(-1).event === 'error' && events.at(-1).message === 'The model has no visible geometry.', 'empty model has a distinct error');
     await viewer.load(unbound);
     viewer.command({ action: 'wallOpacity', value: .5 });
-    result.textContent = 'PASS: unbound ready/capabilities/editor-state, See Through, zero-storey exploded, both multiscene defaults, legacy guard, empty-geometry error.';
+    result.textContent = 'PASS: unbound ready/capabilities/editor-state, See Through, zero-storey exploded, both multiscene defaults with leaf and nested roots, legacy guard, empty-geometry error.';
   } catch (error) { result.textContent = `FAIL: ${error.message}`; throw error; }
 };
 window.addEventListener('pagehide', () => viewer?.dispose(), { once: true });

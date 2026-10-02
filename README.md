@@ -123,9 +123,11 @@ avoid duplicate constructors: Urby pins 0.180.0; Urbanwave retains ^0.186.1.
 Hosts importing declarations also need their usual matching `@types/three`.
 
 `loadModel` preserves source associations across all loaded scenes, including
-multi-primitive meshes and Three r186 shared-scene clones. It captures reachable
-nodes before GLTFLoader's per-scene pruning; it does not preload unused nodes or
-recover identities from names. Temporary clone markers are removed before return.
+multi-primitive meshes and Three r186 shared-scene clones. During parsing it retains
+the live association records across GLTFLoader's per-scene pruning, protecting
+parents whose children are still loading. It does not preload unused nodes or
+recover identities from names. Temporary clone markers and the parser accessor
+are removed before return; rejected loads cannot stamp late sibling markers.
 Scene hierarchy remains Three-version-native (r180 reparents shared scene roots;
 r186 clones them); the package does not fabricate replacement geometry.
 

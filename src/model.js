@@ -30,25 +30,44 @@ export async function loadModel(input) {
     throw new Error(externalError);
   });
   const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
-  // GLTFLoader reduces associations separately for each scene. Capture reachable
-  // nodes before that reduction; do not eagerly load unreferenced node resources.
+  // GLTFLoader reduces associations separately for each scene, even while a
+  // different node's children are still loading. Preserve the live map during
+  // parsing, without eagerly loading unreferenced node resources.
   // A temporary serializable marker also survives r186's shared-scene clones.
   const marker = `__propertyViewerSource_${THREE.MathUtils.generateUUID()}`;
-  const saved = new Map();
+  const marked = new Set();
+  let captureActive = true;
+  let restoreAssociations = () => {};
   loader.register(parser => ({
     name: 'PROPERTY_VIEWER_source_associations',
+    beforeRoot() {
+      const descriptor = Object.getOwnPropertyDescriptor(parser, 'associations');
+      const associations = parser.associations;
+      Object.defineProperty(parser, 'associations', {
+        configurable: true,
+        enumerable: true,
+        get: () => associations,
+        set: reduced => {
+          // Keep the actual records: GLTFLoader later mutates .nodes in place.
+          for (const [object, association] of reduced) associations.set(object, association);
+        },
+      });
+      restoreAssociations = () => Object.defineProperty(parser, 'associations', { ...descriptor, value: associations });
+    },
     async loadNode(index) {
       const node = await parser.loadNode(index);
+      // Promise.all rejection does not cancel sibling node loads.
+      if (!captureActive) return node;
       node.traverse(object => {
         const association = parser.associations.get(object);
         if (!association) return;
-        saved.set(object, { ...association });
+        marked.add(object);
         object.userData[marker] = { ...association };
       });
       return node;
     },
     afterRoot(result) {
-      for (const [object, association] of saved) parser.associations.set(object, association);
+      restoreAssociations();
       for (const scene of result.scenes) scene.traverse(object => {
         if (object.userData[marker]) {
           parser.associations.set(object, object.userData[marker]);
@@ -61,7 +80,9 @@ export async function loadModel(input) {
   try {
     gltf = await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
   } finally {
-    for (const object of saved.keys()) delete object.userData[marker];
+    captureActive = false;
+    restoreAssociations();
+    for (const object of marked) delete object.userData[marker];
   }
   if (blocked || failed) {
     disposeModels(gltf.scenes);
