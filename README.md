@@ -2,7 +2,8 @@
 
 Shared Three.js `cad_scene` v1 viewer, published from the private
 [UrbanNX/property-viewer](https://github.com/UrbanNX/property-viewer) repository.
-The `v0.2.0` tag includes both the viewer and editable model APIs.
+The published `v0.2.0` tag includes the viewer and editable model APIs. The
+unpublished `0.3.0` source also exposes shared rendering interpretation rules.
 It does not import Urby, Flutter, React, or Rails.
 
 ## What is implemented
@@ -118,3 +119,23 @@ stale loads, geometry validation and atomic replacement of its current model.
 Both APIs use this loading and disposal implementation. Three.js is a peer to
 avoid duplicate constructors: Urby pins 0.180.0; Urbanwave retains ^0.186.1.
 Hosts importing declarations also need their usual matching `@types/three`.
+
+## Rendering interpretation API (unpublished 0.3.0)
+
+```js
+import {
+  annotations, worldPoint, meshBinding, floorBand, previewSection,
+  previewMesh, sectionBounds, frameBounds, PassiveRotation,
+} from '@urbannx/property-viewer/rendering';
+```
+
+This non-UI API shares `cad_scene` v1 interpretation, coordinates, floor/cut
+selection, architectural preview materials, clipped bounds, perspective framing,
+and optional passive rotation. `annotations(json)` accepts a raw glTF JSON document
+with `json.extras.cad_scene`; unsupported or malformed metadata returns `null`.
+After `loadModel`, hosts can adapt explicitly with `annotations({ extras: gltf.userData })`.
+`meshBinding` returns ordered `{ floor, category }` bindings without collapsing
+multi-target categories, plus unique `floors` and the derived `sectioned` flag.
+The primitives do not mutate source metadata, meshes, materials, bounds, or
+direction/target vectors. Hosts continue to own controls, overlays, editing,
+arbitrary section tools, persistence, and application UI.
