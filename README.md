@@ -16,8 +16,9 @@ It does not import Urby, Flutter, React, or Rails.
 - A browser consumer in `examples/browser` with its own package.json, two
   independent instances, file input, and a synthetic model requiring no backend.
 
-Urbanwave's `urbanwaveProject` annotations, editor, costing, walk mode, and exports
-remain host-owned. Urbanwave consumes the annotation-neutral `./model` API for
+UrbanWave's `urbanwaveProject` annotations are supported alongside legacy `cad_scene`.
+The editor, costing, walk mode, and exports remain host-owned.
+Urbanwave consumes the annotation-neutral `./model` API for
 every GLB load and disposal, preserving editing and exports. The high-level
 `createPropertyViewer` API still emits `unsupported` for plain GLBs; Urby retains
 its legacy viewer fallback.
@@ -82,6 +83,7 @@ const viewer = createPropertyViewer({
 await viewer.load(await file.arrayBuffer());
 viewer.command({ action: 'view', mode: 'floor', floor: 'Ground' });
 viewer.command({ action: 'labels', value: true });
+viewer.command({ action: 'wallOpacity', value: 0.5 }); // See Through
 viewer.dispose(); // React effect cleanup or WebView pagehide
 ```
 
@@ -120,6 +122,15 @@ Both APIs use this loading and disposal implementation. Three.js is a peer to
 avoid duplicate constructors: Urby pins 0.180.0; Urbanwave retains ^0.186.1.
 Hosts importing declarations also need their usual matching `@types/three`.
 
+`loadModel` preserves source associations across all loaded scenes, including
+multi-primitive meshes and Three r186 shared-scene clones. During parsing it retains
+the live association records across GLTFLoader's per-scene pruning, protecting
+parents whose children are still loading. It does not preload unused nodes or
+recover identities from names. Temporary clone markers and the parser accessor
+are removed before return; rejected loads cannot stamp late sibling markers.
+Scene hierarchy remains Three-version-native (r180 reparents shared scene roots;
+r186 clones them); the package does not fabricate replacement geometry.
+
 ## Rendering interpretation API (unpublished 0.3.0)
 
 ```js
@@ -139,3 +150,120 @@ multi-target categories, plus unique `floors` and the derived `sectioned` flag.
 The primitives do not mutate source metadata, meshes, materials, bounds, or
 direction/target vectors. Hosts continue to own controls, overlays, editing,
 arbitrary section tools, persistence, and application UI.
+
+## Universal annotation resolver
+
+`@urbannx/property-viewer/annotations` is renderer-independent (no Three.js import):
+
+```js
+import {
+  resolveAnnotations, createAnnotations, resolveSourceNode, resolveObjectBinding,
+  sourceNodeIndex, classifyType,
+} from '@urbannx/property-viewer/annotations';
+
+const data = await resolveAnnotations(bytes, gltf.parser.json);
+const binding = resolveObjectBinding(data, mesh, gltf.parser.associations);
+// { nodeIndex, sourceName, meta, bindings, floors, wall, sectioned }
+
+// Editors: current validated ProjectData, no byte parse/hash on metadata edits.
+const editable = createAnnotations(gltf.parser.json, currentProject);
+// Before an editor project exists, pass null to inherit original node.extras.
+const source = createAnnotations(gltf.parser.json, null);
+```
+
+`resolveAnnotations` uses UrbanWave's authoritative `vibes/packages/glb-project`
+parser and fingerprint validation, bundled at immutable revision
+[`c33b638`](https://github.com/UrbanNX/urbanwave/commit/c33b63887010f0b0de6c64ed9e895fa2677c05b8).
+`node build-contract.mjs` regenerates it with pinned esbuild and authenticated `gh`
+read access. Runtime consumers need neither checkout nor network. The generated
+file is not an independently maintained schema. The synthetic fixture originated
+in [Urby PR #3264](https://github.com/UrbanNX/urby/pull/3264).
+
+The selected glTF scene's universal annotations take precedence over `cad_scene`;
+malformed universal data or mismatched fingerprints throw, never fall back. Plain
+GLBs resolve to null and the high-level viewer emits `unsupported`. The synchronous
+`createAnnotations(json, null)` is an explicit editor-only source profile; it does
+not make the high-level viewer support plain GLBs.
+
+Source identity is the glTF **node index**, not a runtime object name. The structural
+`sourceNodeIndex` adapter walks GLTFLoader associations to the closest source node,
+including multi-primitive parent groups. Loader-sanitized/generated names can collide
+with original names; never use them to look up `project.meta`. Duplicate original
+names with project annotations reject as ambiguous. Unannotated duplicate names
+remain distinguishable by index. Invalid/cyclic source hierarchies reject.
+
+Effective `meta` fields inherit independently from the nearest non-null value;
+project metadata overrides baked `node.extras` on the same node. An explicit empty
+string masks an ancestor value. Edits to `data.project.meta` are read on each resolve;
+recreate the data for immutable project replacement or storey/room changes. Metadata
+for generated/non-source objects is allowed, but cannot bind to absent source nodes.
+Unknown storey names remain in `meta.floor` and produce `floors: []`. Null/unknown
+indices return null identities, empty metadata/floors and false wall/sectioned flags.
+The source-only profile has no declared floors. `SourceJson`, `AnnotationProject`,
+`AnnotationData` and `SourceBinding` structural types are exported.
+
+The two entrypoints share one CAD parser and target resolver: `resolveAnnotations`
+delegates CAD parsing to `rendering.annotations`, and `resolveObjectBinding`
+delegates rendered CAD objects directly to `rendering.meshBinding`. Its runtime
+ancestry includes mesh extras that may not appear on source glTF nodes. For CAD,
+`resolveSourceNode` promises **node-extras ancestry only**; it is not a substitute
+for `resolveObjectBinding` on loaded meshes. No GLTFLoader hierarchy is simulated.
+For universal/source profiles, `resolveObjectBinding` uses loader associations and
+then `resolveSourceNode`, never runtime names.
+
+`SourceBinding` extends the ordered `MeshBinding` representation. Universal types
+map `wall`/`walls`/`facade` to category `Walls`, doors to `Doors`, windows to `Windows`;
+other nonempty type strings retain their authored category text. Empty types have
+no category binding. CAD bindings preserve source target order, including repeated
+floors and categories. CAD effective `meta.floor` exists only for a single floor;
+`meta.type` is `wall` only for safely wall-only targets, `mixed` for mixed or partially
+resolved wall targets, `door`/`window` for those unambiguous categories, and empty
+for unknown semantics. This supports editor project inference without duplicating
+category interpretation. Retain CAD data for the original multi-target section
+semantics when turning that inference into an editable project.
+
+`previewSection` accepts any data with `levels` and `cutHeight`, including
+`AnnotationData`; its runtime behaviour and the shared `frameBounds` are unchanged.
+The additive `MeshBinding.wall` declaration is optional so pre-existing hosts can
+still construct preview entries without supplying it; resolvers always emit it.
+
+### Wall semantics and opacity
+
+`classifyType` accepts **exact**, trimmed, case-insensitive values:
+
+| Type | Fade wall | Section/cut |
+| --- | --- | --- |
+| `wall`, `walls`, `facade` | yes | yes |
+| `door`, `doors`, `window`, `windows` | no | yes |
+| `boundary_wall`, `boundary wall`, `mixed`, `wall/window`, unknown/empty | no | no |
+
+No substring matching is used. Descendant openings/boundary/mixed metadata overrides
+inherited wall classification. If one source node merges walls and openings, mark
+it `mixed`; neither this resolver nor GLTFLoader can infer wall-only triangles from
+an incorrectly labelled merged mesh. Legacy `cad_scene` fades only bindings whose
+targets all resolve to `Walls`; window, mixed and unresolved targets stay opaque.
+
+`ready` adds `profile`, `hasEditorState`, `canSetWallOpacity`; `state` adds
+`wallOpacity`, `canSetWallOpacity`. Hosts needing an old `hasWalls` flag should map
+the capability in their adapter. Editor edits/new walls/scenarios are reported via
+`hasEditorState`, not rendered by the high-level viewer.
+
+`{ action: 'wallOpacity', value }` clamps finite values to 0–1 (nonfinite values are
+ignored). It is an authored-opacity multiplier: **1 restores** original opacity,
+transparent and depthWrite flags; **0.5 is See Through**; **0 is fully transparent**.
+Outlines fade proportionally and disappear at zero. Faded walls neither cast nor
+receive opaque shadows; preview shadow flags restore at 1. Source materials are
+never modified. Doors, windows, boundary/mixed and unknown geometry retain their
+authored materials. Opacity survives view changes but resets to 1 on each load;
+these transient presentation changes are never persisted into a GLB.
+
+Universal models need geometry, not floor assignments: even with no declared
+storeys they support exterior/See Through and report editor-state capabilities.
+The bound-floor requirement remains specific to legacy CAD. Annotated models with
+no mesh geometry emit `error: The model has no visible geometry.`
+
+For real WebGL regression checks, build the browser example, open
+`regression.html` on its server, and click **Run loading regressions**. It asserts
+unbound universal ready/capability/editor-state events, opacity, zero-storey
+exploded mode, both multiscene default indices, the legacy bound-floor guard, and
+the separate empty-geometry error. The status must read `PASS`.

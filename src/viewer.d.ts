@@ -3,10 +3,11 @@ export type ViewerCommand =
   | { action: 'view'; mode: 'floor'; floor: string }
   | { action: 'view'; mode: Exclude<ViewMode, 'floor'> }
   | { action: 'top' | 'reset' }
+  | { action: 'wallOpacity'; value: number }
   | { action: 'cut' | 'labels'; value: boolean };
 export type ViewerEvent =
-  | { event: 'ready'; floors: string[]; hasRooms: boolean }
-  | { event: 'state'; mode: ViewMode; floor: string | null; cut: boolean; labels: boolean; canCut: boolean }
+  | { event: 'ready'; floors: string[]; hasRooms: boolean; profile: 'cad_scene' | 'urbanwaveProject'; hasEditorState: boolean; canSetWallOpacity: boolean }
+  | { event: 'state'; mode: ViewMode; floor: string | null; cut: boolean; labels: boolean; canCut: boolean; wallOpacity: number; canSetWallOpacity: boolean }
   | { event: 'unsupported' }
   | { event: 'error'; message: string };
 export interface PropertyViewer {

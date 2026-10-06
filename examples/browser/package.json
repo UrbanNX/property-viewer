@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild main.js --bundle --format=esm --outfile=dist/main.js && cp index.html dist/index.html"
+    "build": "esbuild main.js regression.js --bundle --format=esm --outdir=dist && cp index.html regression.html dist/"
   },
   "dependencies": { "@urbannx/property-viewer": "file:../..", "three": "0.180.0" },
   "devDependencies": { "esbuild": "0.25.10" }

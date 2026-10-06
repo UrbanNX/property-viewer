@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadModel, disposeModels } from './model.js';
+import { sourceNodeIndex } from './universal.js';
+import { plainFixture, unpackJson, packGlb } from './urbanwave-fixture.js';
 
 function glb(json) {
   const text = JSON.stringify({ asset: { version: '2.0' }, ...json });
@@ -81,4 +84,117 @@ test('disposes shared geometry, materials, textures, skeletons and instances exa
   disposeModels([root, root]);
   assert.equal(counts.size, 5);
   assert.ok([...counts.values()].every((count) => count === 1));
+});
+
+test('real multiscene loader preserves source associations for both default indices without loading unreachable resources', async () => {
+  const original = plainFixture(), json = unpackJson(original);
+  json.nodes = [{ name: 'SceneA', mesh: 0, extras: { note: 'authored' } }, { name: 'SceneB', mesh: 1 }, { mesh: 2 }];
+  json.scenes = [{ nodes: [0] }, { nodes: [1] }];
+  json.meshes[0].primitives.push({ ...json.meshes[0].primitives[0] });
+  // This unreferenced mesh must stay unrequested; eager node preloading changes
+  // the neutral API and would fail on its external buffer.
+  json.buffers.push({ uri: 'https://example.invalid/unreachable.bin', byteLength: 36 });
+  json.bufferViews.push({ buffer: 1, byteLength: 36 });
+  json.accessors.push({ bufferView: 3, componentType: 5126, count: 3, type: 'VEC3', min: [0, 0, 0], max: [1, 1, 1] });
+  json.meshes[2] = { primitives: [{ attributes: { POSITION: 3 } }] };
+  for (const reversed of [false, true]) for (const scene of [0, 1]) {
+    json.scenes = reversed ? [{ nodes: [1] }, { nodes: [0] }] : [{ nodes: [0] }, { nodes: [1] }];
+    json.scene = scene;
+    const model = await loadModel(packGlb(json, original.subarray(28 + new DataView(original.buffer).getUint32(12, true))));
+    try {
+      assert.equal(model.scene, model.scenes[scene]);
+      const resolved = model.scenes.map(root => {
+        const indices = [];
+        root.traverse(object => { if (object.isMesh) indices.push(sourceNodeIndex(object, model.parser.associations)); });
+        return indices;
+      });
+      assert.deepEqual(resolved, reversed ? [[1], [0, 0]] : [[0, 0], [1]]);
+      assert.deepEqual(model.scenes[reversed ? 1 : 0].children[0].userData, { name: 'SceneA', note: 'authored' });
+      assert.equal([...model.parser.associations.values()].some(value => value.nodes === 2), false);
+    } finally { disposeModels(model.scenes); }
+  }
+});
+
+test('scene-shared nodes retain identities on r186 clones without leaking temporary metadata', async () => {
+  const original = plainFixture(), json = unpackJson(original);
+  json.nodes = [{ name: 'Shared', mesh: 0, extras: { note: 'keep me' } }];
+  json.scenes = [{ nodes: [0] }, { nodes: [0] }]; json.scene = 0;
+  json.meshes[0].primitives.push({ ...json.meshes[0].primitives[0] });
+  const model = await loadModel(packGlb(json, original.subarray(28 + new DataView(original.buffer).getUint32(12, true))));
+  try {
+    // r180 reparents shared roots; r186 clones them. Preserve the loader's scene
+    // behavior rather than fabricating new geometry in the neutral model API.
+    const roots = model.scenes.flatMap(scene => scene.children);
+    assert.equal(roots.length, Number(THREE.REVISION) >= 186 ? 2 : 1);
+    for (const root of roots) {
+      assert.deepEqual(root.userData, { name: 'Shared', note: 'keep me' });
+      root.traverse(object => {
+        assert.equal(sourceNodeIndex(object, model.parser.associations), 0);
+        assert.equal(Object.keys(object.userData).some(key => key.startsWith('__propertyViewerSource_')), false);
+        if (object.isMesh) assert.equal(model.parser.associations.get(object).meshes, 0);
+      });
+    }
+  } finally { disposeModels(model.scenes); }
+});
+
+test('a fast other scene cannot prune a mesh parent while its child is loading', async () => {
+  const original = plainFixture(), json = unpackJson(original);
+  json.nodes = [
+    { name: 'RootWithChildren', mesh: 0, children: [2] },
+    { name: 'FastOtherScene', mesh: 1 },
+    { name: 'Leaf', mesh: 2 },
+  ];
+  for (const reversed of [false, true]) for (const scene of [0, 1]) {
+    json.scenes = reversed ? [{ nodes: [1] }, { nodes: [0] }] : [{ nodes: [0] }, { nodes: [1] }];
+    json.scene = scene;
+    const model = await loadModel(packGlb(json, original.subarray(28 + new DataView(original.buffer).getUint32(12, true))));
+    try {
+      const source = [];
+      for (const root of model.scenes) root.traverse(object => {
+        if (object.isMesh) source.push([sourceNodeIndex(object, model.parser.associations), model.parser.associations.get(object)?.meshes]);
+        assert.equal(Object.keys(object.userData).some(key => key.startsWith('__propertyViewerSource_')), false);
+      });
+      assert.deepEqual(source, reversed ? [[1, 1], [0, 0], [2, 2]] : [[0, 0], [2, 2], [1, 1]]);
+      const descriptor = Object.getOwnPropertyDescriptor(model.parser, 'associations');
+      assert.equal(descriptor.get, undefined);
+      assert.equal(descriptor.writable, true);
+    } finally { disposeModels(model.scenes); }
+  }
+});
+
+test('failed parsing restores the association property and prevents late sibling markers', async () => {
+  const original = plainFixture(), json = unpackJson(original);
+  json.nodes = [{ mesh: 0, children: [2] }, { mesh: 999 }, { mesh: 2 }];
+  json.scenes = [{ nodes: [0] }, { nodes: [1] }]; json.scene = 0;
+  const register = GLTFLoader.prototype.register;
+  const pending = [];
+  let parser;
+  // Observe real plugin promises, without mocking node loading or its timing.
+  GLTFLoader.prototype.register = function (callback) {
+    return register.call(this, value => {
+      const plugin = callback(value);
+      if (plugin.name === 'PROPERTY_VIEWER_source_associations') {
+        parser = value;
+        const loadNode = plugin.loadNode;
+        plugin.loadNode = function (index) {
+          const promise = loadNode.call(this, index);
+          pending.push(promise);
+          return promise;
+        };
+      }
+      return plugin;
+    });
+  };
+  try {
+    await assert.rejects(loadModel(packGlb(json, original.subarray(28 + new DataView(original.buffer).getUint32(12, true)))));
+    const results = await Promise.allSettled(pending);
+    const nodes = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+    assert.ok(nodes.length > 0, 'a successful sibling completes despite the failed scene');
+    for (const node of nodes) node.traverse(object => {
+      assert.equal(Object.keys(object.userData).some(key => key.startsWith('__propertyViewerSource_')), false);
+    });
+    assert.equal(Object.getOwnPropertyDescriptor(parser, 'associations').get, undefined);
+    assert.equal(Object.getOwnPropertyDescriptor(parser, 'associations').writable, true);
+    disposeModels(nodes);
+  } finally { GLTFLoader.prototype.register = register; }
 });

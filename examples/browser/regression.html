@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Property viewer loading regressions</title>
+<style>
+body { font: 16px system-ui; margin: 24px; color: #24382e; }
+pre { white-space: pre-wrap; max-width: 900px; }
+#stage { position: relative; width: 640px; height: 480px; background: #ecefe7; }
+#canvas, #labels { position: absolute; inset: 0; }
+#labels { pointer-events: none; }
+</style>
+<h1>Real WebGL loading regressions</h1>
+<button id="run">Run loading regressions</button>
+<pre id="result" role="status">Not run</pre>
+<div id="stage"><div id="canvas"></div><div id="labels"></div></div>
+<script type="module" src="./regression.js"></script>
+</html>

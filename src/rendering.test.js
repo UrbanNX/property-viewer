@@ -14,7 +14,7 @@ test('public rendering API interprets the representative loaded GLTF result and 
     ]);
     const wall = gltf.scene.getObjectByName('First-back');
     assert.deepEqual(meshBinding(wall, data), {
-      bindings: [{ floor: 'First', category: 'Walls' }], floors: ['First'], sectioned: true,
+      bindings: [{ floor: 'First', category: 'Walls' }], floors: ['First'], sectioned: true, wall: true,
     });
     assert.equal(annotations(gltf), null);
   } finally {
